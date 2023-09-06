@@ -1,6 +1,6 @@
 import asyncdispatch, uuids, times
-import std/options, std/json
-import database
+import std/[options,json]
+import database, types
 import unittest
 {.experimental: "caseStmtMacros".}
 
@@ -13,11 +13,11 @@ suite "database testing":
   test "simple scenario":
     let uuid = $genUUID()
     let pessoa = Pessoa(
-      id: uuid,
+      id: some(uuid),
       apelido: "foo",
-      nome: "nome",
-      nascimento: "2000-01-01",
-      stack: @["foo", "bar", "baz"])
+      nome: some("nome"),
+      nascimento: some("2000-01-01"),
+      stack: some(@["foo", "bar", "baz"]))
 
     try:
       waitFor insertPessoa(pessoa)
@@ -30,7 +30,7 @@ suite "database testing":
     let res = waitFor getPessoaById(uuid)
     case res
     of Some(@pessoa):
-      check(pessoa.id == uuid)
+      check(pessoa.id.get() == uuid)
     of None():
       raise newException(IOError, "I can't do that Dave.")
 
@@ -39,8 +39,8 @@ suite "database testing":
 
   test "json parsing":
     let body = """
-    {'pessoa':
-      '{
+    {"pessoa":
+      {
         "apelido": "jose",
         "nome": "Jose Roberto",
         "nascimento": "2000-02-01",

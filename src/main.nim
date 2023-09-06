@@ -1,8 +1,8 @@
 # This is just an example to get you started. A typical binary package
 # uses this file as the main entry point of the application.
-import asyncdispatch, jester, strutils, uuids, times
+import asyncdispatch, jester, strutils, uuids
 import std/json
-import database
+import database, types
 {.experimental: "caseStmtMacros".}
 
 import fusion/matching
@@ -27,15 +27,21 @@ router rinha_api:
       resp(Http404, "")
 
   post "/pessoas":
-    let data = parseJson(request.body)
-    let nested = to(data, NestedPessoa)
-    let pessoa = nested.pessoa
+    try:
+      let data = parseJson(request.body)
+      let nested = to(data, NestedPessoa)
+      let pessoa = nested.pessoa
 
-    let uuid = $genUUID()
-    pessoa.id = uuid
-    await insertPessoa(pessoa)
-    # headers.add("Location", "/pessoas/" & uuid)
-    resp(Http201, "")
+      let uuid = $genUUID()
+      pessoa.id = some(uuid)
+      if isNone(pessoa.stack):
+        pessoa.stack = some(newSeq[string](0))
+
+      await insertPessoa(pessoa)
+      setHeader(responseHeaders, "Location", "/pessoas/" & uuid)
+      resp(Http201, "")
+    except:
+      resp(Http422, "")
 
 proc main() =
   let settings = newSettings(port=Port(3000))

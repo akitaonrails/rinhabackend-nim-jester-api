@@ -2,33 +2,7 @@ import asyncdispatch, strutils, sequtils, times
 import std/options
 import pg
 import std/json
-
-# Model definition
-type
-  Pessoa* = ref object of RootObj
-    id*: string
-    apelido*: string
-    nome*: string
-    nascimento*: string
-    stack*: seq[string]
-
-type
-  NestedPessoa* = ref object of RootObj
-    pessoa*: Pessoa
-
-# serializers
-proc toJson*(p: Pessoa): JsonNode =
-  result = newJObject()
-  result["id"] = %p.id
-  result["apelido"] = %p.apelido
-  result["nome"] = %p.nome
-  result["nascimento"] = %p.nascimento
-  result["stack"] = %p.stack
-
-proc toJson*(p: seq[Pessoa]): JsonNode =
-  result = newJArray()
-  for pessoa in p:
-    result.add(pessoa.toJson())
+import types
 
 # Initialize Database
 var global_pool* {.threadvar.}: AsyncPool
@@ -66,7 +40,7 @@ proc insertPessoa*(pessoa: Pessoa) {.async.} =
     INSERT INTO public.pessoas (id, apelido, nome, nascimento, stack, created_at, updated_at)
     VALUES (?, ?, ?, ?::timestamp(6), ?, NOW(), NOW());
   """
-  await global_pool.exec(query, @[pessoa.id, pessoa.apelido, pessoa.nome, pessoa.nascimento, $(%*(pessoa.stack))])
+  await global_pool.exec(query, @[pessoa.id.get(), pessoa.apelido, pessoa.nome.get(), pessoa.nascimento.get(), $(%*(pessoa.stack.get()))])
 
 # Get the count of Pessoas
 proc getPessoasCount*(): Future[int] {.async.} =
@@ -90,11 +64,11 @@ proc getPessoaById*(id: string): Future[Option[Pessoa]] {.async.} =
 
     let row = result[0]
     return some(Pessoa(
-      id: row[0],
+      id: some(row[0]),
       apelido: row[1],
-      nome: row[2],
-      nascimento: row[3],
-      stack: row[4].split(",")))
+      nome: some(row[2]),
+      nascimento: some(row[3]),
+      stack: some(row[4].split(","))))
   except:
     return none(Pessoa)
 
@@ -110,9 +84,9 @@ proc searchPessoas*(term: string): Future[seq[Pessoa]] {.async.} =
     return @[]
 
   return result.mapIt(Pessoa(
-    id: it[0],
+    id: some(it[0]),
     apelido: it[1],
-    nome: it[2],
-    nascimento: it[3],
-    stack: it[4].split(",")
+    nome: some(it[2]),
+    nascimento: some(it[3]),
+    stack: some(it[4].split(","))
     ))

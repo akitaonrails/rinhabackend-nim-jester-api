@@ -5,7 +5,7 @@ author        = "AkitaOnRails"
 description   = "Rinha Backend API"
 license       = "MIT"
 srcDir        = "src"
-bin           = @["main"]
+bin           = @["rinha"]
 
 
 # Dependencies

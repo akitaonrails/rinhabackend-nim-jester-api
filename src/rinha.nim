@@ -1,6 +1,6 @@
 # This is just an example to get you started. A typical binary package
 # uses this file as the main entry point of the application.
-import asyncdispatch, jester, strutils, uuids
+import asyncdispatch, jester, strutils, sequtils, uuids
 import std/json
 import database, types
 {.experimental: "caseStmtMacros".}
@@ -24,22 +24,24 @@ router rinha_api:
       let results = await searchPessoas(request.params["t"])
       resp(Http200, $toJson(results))
     else:
-      resp(Http404, "")
+      resp(Http400, "")
 
   post "/pessoas":
     try:
       let data = parseJson(request.body)
-      let nested = to(data, NestedPessoa)
-      let pessoa = nested.pessoa
+      let pessoa = to(data, Pessoa)
 
       let uuid = $genUUID()
       pessoa.id = some(uuid)
       if isNone(pessoa.stack):
         pessoa.stack = some(newSeq[string](0))
 
-      await insertPessoa(pessoa)
-      setHeader(responseHeaders, "Location", "/pessoas/" & uuid)
-      resp(Http201, "")
+      if all(pessoa.stack.get(), proc (x: string): bool = x.len <= 32):
+        await insertPessoa(pessoa)
+        setHeader(responseHeaders, "Location", "/pessoas/" & uuid)
+        resp(Http201, "")
+      else:
+        resp(Http400, "")
     except:
       resp(Http422, "")
 
@@ -48,7 +50,11 @@ proc main() =
   var jester = initJester(rinha_api, settings=settings)
 
   initDb()
-  waitFor createPessoaTable()
+  try:
+    waitFor createPessoaTable()
+  except:
+    echo "the other node already created everything"
+
   jester.serve()
 
 when isMainModule:

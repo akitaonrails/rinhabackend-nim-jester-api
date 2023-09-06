@@ -39,16 +39,14 @@ suite "database testing":
 
   test "json parsing":
     let body = """
-    {"pessoa":
       {
         "apelido": "jose",
         "nome": "Jose Roberto",
         "nascimento": "2000-02-01",
         "stack": ["foo", "bar", "baz"]
        }
-    }
     """
     let json = parseJson(body)
 
-    let nested = to(json, NestedPessoa)
-    check(nested.pessoa.apelido == "jose")
+    let pessoa = to(json, Pessoa)
+    check(pessoa.apelido == "jose")

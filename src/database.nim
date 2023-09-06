@@ -1,4 +1,4 @@
-import asyncdispatch, strutils, sequtils, times
+import asyncdispatch, strutils, sequtils, strformat
 import std/options
 import pg
 import std/json
@@ -8,13 +8,24 @@ import types
 var global_pool* {.threadvar.}: AsyncPool
 
 proc initDb*() =
-  global_pool = newAsyncPool("localhost", "postgres", "password", "postgres", 10)
+  let pgconf = parseEnv()
+
+  var retries = 0
+  while retries < 2:
+    try:
+      global_pool = newAsyncPool(pgconf.hostname, pgconf.username, pgconf.password, pgconf.database, pgconf.poolSize)
+      return
+    except:
+      echo fmt"Waiting for {pgconf.hostname} to be ready..."
+      waitFor sleepAsync(1000)
+      inc(retries)
+    quit(0)
 
 proc createPessoaTable*() {.async.} =
   let sqlQueries = sql"""
     CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
-    DROP TABLE public.pessoas CASCADE;
+    DROP TABLE IF EXISTS public.pessoas CASCADE;
     CREATE TABLE public.pessoas (
         id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
         apelido character varying(32) NOT NULL,

@@ -1,4 +1,55 @@
 import std/[options,json]
+import os, strutils
+
+# Config definition
+type
+  PgConfig* = object
+    hostname*: string
+    port*: int
+    username*: string
+    password*: string
+    database*: string
+    poolSize*: int
+
+proc parseEnv*() : PgConfig =
+  var config = PgConfig()
+  let hostname = getEnv("DB_HOST")
+  if len(hostname) == 0:
+    config.hostname = "localhost"
+  else:
+    config.hostname = hostname
+
+  try:
+    let port = parseInt(getEnv("DB_PORT"))
+    config.port = port
+  except:
+    config.port = 5432
+
+  let username = getEnv("DB_USERNAME")
+  if len(username) == 0:
+    config.username = "postgres"
+  else:
+    config.username = username
+
+  let password = getEnv("DB_PASSWORD")
+  if len(password) == 0:
+    config.password = "password"
+  else:
+    config.password = password
+
+  let database = getEnv("DB_DATABASE")
+  if len(database) == 0:
+    config.database = "postgres"
+  else:
+    config.database = database
+
+  try:
+    let poolSize = parseInt(getEnv("DB_POOL_SIZE"))
+    config.poolSize = poolSize
+  except:
+    config.poolSize = 10
+
+  return config
 
 # Model definition
 type
@@ -8,10 +59,6 @@ type
     nome*: Option[string]
     nascimento*: Option[string]
     stack*: Option[seq[string]]
-
-type
-  NestedPessoa* = ref object of RootObj
-    pessoa*: Pessoa
 
 # serializers
 proc toJson*(p: Pessoa): JsonNode =
@@ -44,11 +91,6 @@ proc fromJson*(node: JsonNode, T: typedesc[Option[seq[string]]]): Option[seq[str
     return none(seq[string])
 
 proc fromJson*(node: JsonNode, T: typedesc[Pessoa]): Pessoa =
-  new(result)
-  for key, value in fieldpairs(result):
-    node[key] = value
-
-proc fromJson*(node: JsonNode, T: typedesc[NestedPessoa]): NestedPessoa =
   new(result)
   for key, value in fieldpairs(result):
     node[key] = value

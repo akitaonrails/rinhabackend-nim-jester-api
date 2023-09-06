@@ -9,11 +9,29 @@ type
     id*: string
     apelido*: string
     nome*: string
-    nascimento*: DateTime
+    nascimento*: string
     stack*: seq[string]
 
+type
+  NestedPessoa* = ref object of RootObj
+    pessoa*: Pessoa
+
+# serializers
+proc toJson*(p: Pessoa): JsonNode =
+  result = newJObject()
+  result["id"] = %p.id
+  result["apelido"] = %p.apelido
+  result["nome"] = %p.nome
+  result["nascimento"] = %p.nascimento
+  result["stack"] = %p.stack
+
+proc toJson*(p: seq[Pessoa]): JsonNode =
+  result = newJArray()
+  for pessoa in p:
+    result.add(pessoa.toJson())
+
 # Initialize Database
-var global_pool*: AsyncPool
+var global_pool* {.threadvar.}: AsyncPool
 
 proc initDb*() =
   global_pool = newAsyncPool("localhost", "postgres", "password", "postgres", 10)
@@ -48,8 +66,7 @@ proc insertPessoa*(pessoa: Pessoa) {.async.} =
     INSERT INTO public.pessoas (id, apelido, nome, nascimento, stack, created_at, updated_at)
     VALUES (?, ?, ?, ?::timestamp(6), ?, NOW(), NOW());
   """
-  var nascimento_str = (pessoa.nascimento).format("yyyy-MM-dd")
-  await global_pool.exec(query, @[pessoa.id, pessoa.apelido, pessoa.nome, nascimento_str, $(%*(pessoa.stack))])
+  await global_pool.exec(query, @[pessoa.id, pessoa.apelido, pessoa.nome, pessoa.nascimento, $(%*(pessoa.stack))])
 
 # Get the count of Pessoas
 proc getPessoasCount*(): Future[int] {.async.} =
@@ -66,17 +83,20 @@ proc getPessoaById*(id: string): Future[Option[Pessoa]] {.async.} =
     FROM public.pessoas
     WHERE id = ?;
   """
-  let result = await global_pool.rows(query, @[id])
-  if len(result) == 0:
-    return none(Pessoa)
+  try:
+    let result = await global_pool.rows(query, @[id])
+    if len(result) == 0:
+      return none(Pessoa)
 
-  let row = result[0]
-  return some(Pessoa(
-    id: row[0],
-    apelido: row[1],
-    nome: row[2],
-    nascimento: parse(row[3], "yyyy-MM-dd"),
-    stack: row[4].split(",")))
+    let row = result[0]
+    return some(Pessoa(
+      id: row[0],
+      apelido: row[1],
+      nome: row[2],
+      nascimento: row[3],
+      stack: row[4].split(",")))
+  except:
+    return none(Pessoa)
 
 # Search Pessoas based on term
 proc searchPessoas*(term: string): Future[seq[Pessoa]] {.async.} =
@@ -93,6 +113,6 @@ proc searchPessoas*(term: string): Future[seq[Pessoa]] {.async.} =
     id: it[0],
     apelido: it[1],
     nome: it[2],
-    nascimento: parse(it[3], "yyyy-MM-dd"),
+    nascimento: it[3],
     stack: it[4].split(",")
     ))

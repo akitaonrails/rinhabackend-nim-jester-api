@@ -1,5 +1,5 @@
 import asyncdispatch, uuids, times
-import std/options
+import std/options, std/json
 import database
 import unittest
 {.experimental: "caseStmtMacros".}
@@ -16,7 +16,7 @@ suite "database testing":
       id: uuid,
       apelido: "foo",
       nome: "nome",
-      nascimento: parse("2000-01-01", "yyyy-MM-dd"),
+      nascimento: "2000-01-01",
       stack: @["foo", "bar", "baz"])
 
     try:
@@ -29,10 +29,26 @@ suite "database testing":
 
     let res = waitFor getPessoaById(uuid)
     case res
-    of Some(pessoa):
+    of Some(@pessoa):
       check(pessoa.id == uuid)
     of None():
       raise newException(IOError, "I can't do that Dave.")
 
     let results = waitFor searchPessoas("foo")
     check(len(results) == 1)
+
+  test "json parsing":
+    let body = """
+    {'pessoa':
+      '{
+        "apelido": "jose",
+        "nome": "Jose Roberto",
+        "nascimento": "2000-02-01",
+        "stack": ["foo", "bar", "baz"]
+       }
+    }
+    """
+    let json = parseJson(body)
+
+    let nested = to(json, NestedPessoa)
+    check(nested.pessoa.apelido == "jose")

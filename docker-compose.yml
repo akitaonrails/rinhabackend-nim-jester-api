@@ -2,17 +2,15 @@ version: '3.5'
 services:
   api1: &api
     #image: docker.io/akitaonrails/rinhabackendapi-nim-jester:latest
-    build: ./
-    hostname: api1
+    build: .
     environment:
-      - DB_HOST=postgres
-      - DB_POOL_SIZE=100
+      - DB_HOST=localhost
+      - DB_POOL_SIZE=20
+      - OS_NUM_THREADS=4
+      - PORT=3000
     depends_on:
       - postgres
-    expose:
-      - "3000"
-    networks:
-      - mynetwork
+    network_mode: host
     deploy:
       resources:
         limits:
@@ -21,7 +19,11 @@ services:
 
   api2:
     <<: *api
-    hostname: api2
+    environment:
+      - DB_HOST=localhost
+      - DB_POOL_SIZE=20
+      - OS_NUM_THREADS=4
+      - PORT=3001
 
   nginx: # Load Balancer
     image: docker.io/nginx:latest
@@ -31,15 +33,12 @@ services:
     depends_on:
       - api1
       - api2
-    ports:
-      - "9999:9999"
     ulimits:
       nproc: 1000000
       nofile:
         soft: 1000000
         hard: 1000000
-    networks:
-      - mynetwork
+    network_mode: host
     deploy:
       resources:
         limits:
@@ -53,8 +52,7 @@ services:
       POSTGRES_USERNAME: postgres
       POSTGRES_PASSWORD: password
     command: postgres -c 'max_connections=450'
-    expose:
-      - "5432"
+    network_mode: host
     volumes:
       - ./postgresql.conf:/docker-entrypoint-initdb.d/postgresql.conf
     healthcheck:
@@ -63,14 +61,8 @@ services:
       timeout: 5s
       retries: 20
       start_period: 10s
-    networks:
-      - mynetwork
     deploy:
       resources:
         limits:
           cpus: '0.2'
           memory: '1.9GB'
-
-networks:
-  mynetwork:
-    driver: bridge

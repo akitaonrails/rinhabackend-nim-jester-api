@@ -16,7 +16,9 @@ RUN nimble install -y -d
 COPY . .
 
 # Compile the Nim application
-RUN nimble compile -d:release src/rinha.nim -o:/app/rinha
+# source: https://github.com/dom96/httpbeast/issues/19
+# RUN nimble compile --threads:on --opt:speed -d:release src/rinha.nim -o:/app/rinha
+RUN nimble compile --opt:speed -d:release src/rinha.nim -o:/app/rinha
 
 EXPOSE 3000
 

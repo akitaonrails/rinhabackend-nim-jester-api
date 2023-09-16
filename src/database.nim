@@ -1,4 +1,4 @@
-import asyncdispatch, strutils, sequtils, strformat
+import asyncdispatch, strutils, sequtils, strformat, os
 import std/options
 import pg
 import std/json
@@ -11,15 +11,20 @@ proc initDb*() =
   let pgconf = parseEnv()
 
   var retries = 0
-  while retries < 2:
+  while retries < 4:
     try:
       global_pool = newAsyncPool(pgconf.hostname, pgconf.username, pgconf.password, pgconf.database, pgconf.poolSize)
       return
     except:
-      echo fmt"Waiting for {pgconf.hostname} to be ready..."
-      waitFor sleepAsync(1000)
+      sleep(5000)
       inc(retries)
-    quit(0)
+
+  quit(0)
+
+proc getGlobalPool(): AsyncPool =
+  if global_pool.isNil:
+    initDb()
+  return global_pool
 
 proc createPessoaTable*() {.async.} =
   let sqlQueries = sql"""
@@ -32,8 +37,6 @@ proc createPessoaTable*() {.async.} =
         nome character varying(100) NOT NULL,
         nascimento timestamp(6) without time zone,
         stack character varying,
-        created_at timestamp(6) without time zone NOT NULL,
-        updated_at timestamp(6) without time zone NOT NULL,
         searchable text GENERATED ALWAYS AS ((((((nome)::text || ' '::text) || (apelido)::text) || ' '::text) || (COALESCE(stack, ' '::character varying))::text)) STORED
     );
 
@@ -43,22 +46,22 @@ proc createPessoaTable*() {.async.} =
 
     CREATE INDEX IF NOT EXISTS index_pessoas_on_searchable ON public.pessoas USING gist (searchable public.gist_trgm_ops);
   """
-  await global_pool.exec(sqlQueries, @[])
+  await getGlobalPool().exec(sqlQueries, @[])
 
 # Insert a new Pessoa
 proc insertPessoa*(pessoa: Pessoa) {.async.} =
   let query = sql"""
-    INSERT INTO public.pessoas (id, apelido, nome, nascimento, stack, created_at, updated_at)
-    VALUES (?, ?, ?, ?::timestamp(6), ?, NOW(), NOW());
+    INSERT INTO public.pessoas (id, apelido, nome, nascimento, stack)
+    VALUES (?, ?, ?, ?::timestamp(6), ?);
   """
-  await global_pool.exec(query, @[pessoa.id.get(), pessoa.apelido, pessoa.nome.get(), pessoa.nascimento.get(), $(%*(pessoa.stack.get()))])
+  await getGlobalPool().exec(query, @[pessoa.id.get(), pessoa.apelido, pessoa.nome.get(), pessoa.nascimento.get(), $(%*(pessoa.stack.get()))])
 
 # Get the count of Pessoas
 proc getPessoasCount*(): Future[int] {.async.} =
   let query = sql"""
     SELECT COUNT(*) FROM public.pessoas;
   """
-  let result = await global_pool.rows(query, @[])
+  let result = await getGlobalPool().rows(query, @[])
   return parseInt(result[0][0])
 
 # Get Pessoa by ID
@@ -69,7 +72,7 @@ proc getPessoaById*(id: string): Future[Option[Pessoa]] {.async.} =
     WHERE id = ?;
   """
   try:
-    let result = await global_pool.rows(query, @[id])
+    let result = await getGlobalPool().rows(query, @[id])
     if len(result) == 0:
       return none(Pessoa)
 
@@ -90,7 +93,7 @@ proc searchPessoas*(term: string): Future[seq[Pessoa]] {.async.} =
     FROM public.pessoas
     WHERE searchable ILIKE ?;
   """
-  let result = await global_pool.rows(query, @["%" & term & "%"])
+  let result = await getGlobalPool().rows(query, @["%" & term & "%"])
   if len(result) == 0:
     return @[]
 

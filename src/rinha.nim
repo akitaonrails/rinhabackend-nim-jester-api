@@ -1,11 +1,9 @@
 # This is just an example to get you started. A typical binary package
 # uses this file as the main entry point of the application.
-import asyncdispatch, jester, strutils, sequtils, uuids
+import asyncdispatch, jester, strutils, sequtils, uuids, os
 import std/json
 import database, types
-{.experimental: "caseStmtMacros".}
 
-import fusion/matching
 router rinha_api:
   get "/contagem-pessoas":
     let count = await getPessoasCount()
@@ -13,11 +11,10 @@ router rinha_api:
 
   get "/pessoas/@pessoa_id":
     let res = await getPessoaById(@"pessoa_id")
-    case res
-    of Some(@pessoa):
-      resp(Http200, $toJson(pessoa))
-    of None():
-      resp(Http400, "")
+    if isSome(res):
+      resp(Http200, $toJson(res.get()))
+    else:
+      resp(Http404, "")
 
   get "/pessoas":
     if request.params.hasKey("t"):
@@ -46,11 +43,14 @@ router rinha_api:
       resp(Http422, "")
 
 proc main() =
-  let settings = newSettings(port=Port(3000))
+  let port = parseInt(getEnv("PORT"))
+  let settings = newSettings(port=Port(port))
   var jester = initJester(rinha_api, settings=settings)
 
+  echo "initializing database"
   initDb()
   try:
+    echo "creating table"
     waitFor createPessoaTable()
   except:
     echo "the other node already created everything"
